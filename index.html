@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Accompanist Studio</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .modal-backdrop { background: rgba(0,0,0,0.5); }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
+  <div id="app"></div>
+
+  <script>
+    // ============================================
+    // ACCOMPANIST STUDIO (v3 - With Secret Key)
+    // ============================================
+    // CONFIGURATION - Edit these values:
+
+    // App password (for the login screen)
+    const APP_PASSWORD = "piano123";
+
+    // API secret key (must match the key in your Google Apps Script)
+    const API_SECRET_KEY = "CHANGE-THIS-TO-YOUR-OWN-SECRET-KEY-123";
+
+    // Optionally, preset your Google Apps Script URL here:
+    const PRESET_API_URL = "";
+
+    // ============================================
+
+    let isAuthenticated = sessionStorage.getItem('accompanist_auth') === 'true';
+    let API_URL = PRESET_API_URL || localStorage.getItem('accompanist_api_url') || '';
+
+    // Dynamic data storage
+    let sheetsInfo = [];
+    let sheetsData = {};
+    let activeSheet = null;
+
+    // Icons
+    const icons = {
+      music: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/></svg>',
+      table: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>',
+      plus: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>',
+      edit: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>',
+      trash: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>',
+      refresh: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>',
+      settings: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>',
+      x: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>',
+      lock: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>',
+      logout: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>',
+      shield: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>'
+    };
+
+    // ===== API Functions (with secret key) =====
+
+    async function fetchSheetsList() {
+      try {
+        const res = await fetch(`${API_URL}?key=${encodeURIComponent(API_SECRET_KEY)}`);
+        const data = await res.json();
+        if (data.error) {
+          if (data.error === 'Unauthorized') {
+            throw new Error('Invalid API key. Check that your secret key matches.');
+          }
+          throw new Error(data.error);
+        }
+        sheetsInfo = data.sheets || [];
+        if (sheetsInfo.length > 0 && !activeSheet) {
+          activeSheet = sheetsInfo[0].name;
+        }
+        return true;
+      } catch (err) {
+        showError('Failed to load sheets: ' + err.message);
+        return false;
+      }
+    }
+
+    async function fetchSheetData(sheetName) {
+      try {
+        const res = await fetch(`${API_URL}?key=${encodeURIComponent(API_SECRET_KEY)}&sheet=${encodeURIComponent(sheetName)}`);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        sheetsData[sheetName] = {
+          headers: data.headers || [],
+          rows: data.rows || []
+        };
+        return true;
+      } catch (err) {
+        showError('Failed to load ' + sheetName + ': ' + err.message);
+        return false;
+      }
+    }
+
+    async function fetchAllData() {
+      if (!API_URL) return;
+      showLoading(true);
+
+      const success = await fetchSheetsList();
+      if (!success) {
+        showLoading(false);
+        return;
+      }
+
+      for (const sheet of sheetsInfo) {
+        await fetchSheetData(sheet.name);
+      }
+
+      render();
+      showLoading(false);
+    }
+
+    async function saveItem(sheetName, item, isNew) {
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            key: API_SECRET_KEY,
+            action: isNew ? 'add' : 'update',
+            sheet: sheetName,
+            id: item._rowNumber,
+            row: item
+          })
+        });
+        const result = await response.json();
+        if (result.error) throw new Error(result.error);
+        await fetchSheetData(sheetName);
+        render();
+        return true;
+      } catch (err) {
+        showError(err.message);
+        return false;
+      }
+    }
+
+    async function deleteItem(sheetName, rowNumber) {
+      if (!confirm('Are you sure you want to delete this item?')) return;
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            key: API_SECRET_KEY,
+            action: 'delete',
+            sheet: sheetName,
+            id: rowNumber
+          })
+        });
+        const result = await response.json();
+        if (result.error) throw new Error(result.error);
+        await fetchSheetData(sheetName);
+        render();
+      } catch (err) {
+        showError(err.message);
+      }
+    }
+
+    // ===== Helper Functions =====
+
+    function showLoading(show) {
+      const loader = document.getElementById('loader');
+      if (loader) loader.style.display = show ? 'flex' : 'none';
+    }
+
+    function showError(msg) {
+      alert('Error: ' + msg);
+    }
+
+    function showSettings() {
+      const url = prompt('Enter your Google Apps Script URL:', API_URL);
+      if (url !== null) {
+        API_URL = url;
+        localStorage.setItem('accompanist_api_url', url);
+        sheetsInfo = [];
+        sheetsData = {};
+        activeSheet = null;
+        fetchAllData();
+      }
+    }
+
+    function logout() {
+      sessionStorage.removeItem('accompanist_auth');
+      isAuthenticated = false;
+      render();
+    }
+
+    function attemptLogin() {
+      const input = document.getElementById('passwordInput');
+      if (input.value === APP_PASSWORD) {
+        isAuthenticated = true;
+        sessionStorage.setItem('accompanist_auth', 'true');
+        render();
+        if (API_URL) fetchAllData();
+      } else {
+        document.getElementById('loginError').classList.remove('hidden');
+        input.value = '';
+        input.focus();
+      }
+    }
+
+    function handlePasswordKeypress(e) {
+      if (e.key === 'Enter') attemptLogin();
+    }
+
+    function setActiveSheet(name) {
+      activeSheet = name;
+      render();
+    }
+
+    function getForeignKeySheet(columnName) {
+      if (!columnName.endsWith('ID')) return null;
+      const baseName = columnName.slice(0, -2);
+      for (const sheet of sheetsInfo) {
+        if (sheet.name.toLowerCase() === baseName.toLowerCase() ||
+            sheet.name.toLowerCase() === baseName.toLowerCase() + 's') {
+          return sheet.name;
+        }
+      }
+      return null;
+    }
+
+    function getForeignKeyDisplay(fkSheet, value) {
+      const data = sheetsData[fkSheet];
+      if (!data || !data.rows) return value;
+      const idCol = data.headers.find(h => h.toLowerCase().includes('id')) || data.headers[0];
+      const nameCol = data.headers.find(h =>
+        h.toLowerCase().includes('name') || h.toLowerCase().includes('title')
+      ) || data.headers[1] || data.headers[0];
+      const row = data.rows.find(r => r[idCol] == value);
+      return row ? row[nameCol] : value;
+    }
+
+    function getForeignKeyOptions(fkSheet) {
+      const data = sheetsData[fkSheet];
+      if (!data || !data.rows) return [];
+      const idCol = data.headers.find(h => h.toLowerCase().includes('id')) || data.headers[0];
+      const nameCol = data.headers.find(h =>
+        h.toLowerCase().includes('name') || h.toLowerCase().includes('title')
+      ) || data.headers[1] || data.headers[0];
+      return data.rows.map(r => ({ value: r[idCol], label: r[nameCol] }));
+    }
+
+    function getFieldType(columnName) {
+      const lower = columnName.toLowerCase();
+      if (lower === 'date' || lower.endsWith('date')) return 'date';
+      if (lower === 'time' || lower.endsWith('time')) return 'time';
+      if (lower.includes('email')) return 'email';
+      if (lower.includes('phone')) return 'tel';
+      if (lower.includes('notes') || lower.includes('description') || lower.includes('comment')) return 'textarea';
+      if (lower.includes('url') || lower.includes('link') || lower.includes('website')) return 'url';
+      return 'text';
+    }
+
+    function formatColumnName(name) {
+      return name.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()).trim();
+    }
+
+    function formatCellValue(value, columnName) {
+      if (value === null || value === undefined || value === '') return '—';
+      const fkSheet = getForeignKeySheet(columnName);
+      if (fkSheet) return getForeignKeyDisplay(fkSheet, value);
+      return String(value);
+    }
+
+    function closeModal() {
+      const modal = document.getElementById('modal');
+      if (modal) modal.remove();
+    }
+
+    // ===== Modal Functions =====
+
+    function showEditModal(sheetName, row = null) {
+      const isNew = !row;
+      const sheetInfo = sheetsInfo.find(s => s.name === sheetName);
+      if (!sheetInfo) return;
+
+      const headers = sheetInfo.headers;
+      row = row || {};
+
+      const formFields = headers.map(col => {
+        const fieldType = getFieldType(col);
+        const fkSheet = getForeignKeySheet(col);
+        const value = row[col] !== undefined ? row[col] : '';
+        const label = formatColumnName(col);
+
+        if (fkSheet) {
+          const options = getForeignKeyOptions(fkSheet);
+          const optionsHtml = options.map(o =>
+            `<option value="${o.value}" ${o.value == value ? 'selected' : ''}>${o.label}</option>`
+          ).join('');
+          return `
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">${label}</label>
+              <select id="f_${col}" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <option value="">Select...</option>
+                ${optionsHtml}
+              </select>
+            </div>
+          `;
+        } else if (fieldType === 'textarea') {
+          return `
+            <div class="col-span-2">
+              <label class="block text-sm font-medium text-slate-700 mb-1">${label}</label>
+              <textarea id="f_${col}" rows="2" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">${value}</textarea>
+            </div>
+          `;
+        } else {
+          return `
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">${label}</label>
+              <input type="${fieldType}" id="f_${col}" value="${value}" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+          `;
+        }
+      }).join('');
+
+      const modal = document.createElement('div');
+      modal.className = 'fixed inset-0 modal-backdrop flex items-center justify-center p-4 z-50 overflow-y-auto';
+      modal.id = 'modal';
+      modal.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-6 my-8">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-lg font-semibold text-slate-800">${isNew ? 'Add' : 'Edit'} ${sheetName.replace(/s$/, '')}</h2>
+            <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600">${icons.x}</button>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            ${formFields}
+          </div>
+          <div class="flex gap-3 mt-6">
+            <button onclick="closeModal()" class="flex-1 py-2 px-4 border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50">Cancel</button>
+            <button onclick="handleSave('${sheetName}', ${isNew}, ${row._rowNumber || 'null'})" class="flex-1 py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">${isNew ? 'Add' : 'Save'}</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    async function handleSave(sheetName, isNew, rowNumber) {
+      const sheetInfo = sheetsInfo.find(s => s.name === sheetName);
+      if (!sheetInfo) return;
+      const item = { _rowNumber: rowNumber };
+      for (const col of sheetInfo.headers) {
+        const el = document.getElementById('f_' + col);
+        item[col] = el ? el.value : '';
+      }
+      const success = await saveItem(sheetName, item, isNew);
+      if (success) closeModal();
+    }
+
+    // ===== Render Functions =====
+
+    function renderLogin() {
+      return `
+        <div class="min-h-screen flex items-center justify-center p-6">
+          <div class="bg-white rounded-2xl shadow-xl p-8 max-w-sm w-full">
+            <div class="flex flex-col items-center mb-6">
+              <div class="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white mb-4">${icons.lock}</div>
+              <h1 class="text-2xl font-bold text-slate-800">Accompanist Studio</h1>
+              <p class="text-slate-500">Enter password to continue</p>
+            </div>
+            <div id="loginError" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg mb-4 text-sm">Incorrect password</div>
+            <input type="password" id="passwordInput" placeholder="Password" onkeypress="handlePasswordKeypress(event)" class="w-full px-4 py-3 border border-slate-200 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-500" autofocus>
+            <button onclick="attemptLogin()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg font-medium">Sign In</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSetup() {
+      return `
+        <div class="min-h-screen flex items-center justify-center p-6">
+          <div class="bg-white rounded-2xl shadow-xl p-8 max-w-lg w-full">
+            <div class="flex items-center gap-3 mb-6">
+              <div class="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center text-white">${icons.music}</div>
+              <div>
+                <h1 class="text-2xl font-bold text-slate-800">Accompanist Studio</h1>
+                <p class="text-slate-500">Connect to your Google Sheet</p>
+              </div>
+            </div>
+            <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 flex items-start gap-3">
+              <div class="text-green-600 mt-0.5">${icons.shield}</div>
+              <div>
+                <h3 class="font-medium text-green-800">Secured with API Key</h3>
+                <p class="text-sm text-green-700">Your data is protected. Only apps with the correct secret key can access it.</p>
+              </div>
+            </div>
+            <label class="block text-sm font-medium text-slate-700 mb-2">Google Apps Script URL:</label>
+            <input type="url" id="apiUrlInput" placeholder="https://script.google.com/macros/s/.../exec" class="w-full px-4 py-3 border border-slate-200 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <button onclick="connectApi()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg font-medium">Connect</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSheetTab(sheetName) {
+      const data = sheetsData[sheetName];
+      if (!data) return '<div class="p-8 text-center text-slate-500">Loading...</div>';
+
+      const { headers, rows } = data;
+
+      if (headers.length === 0) {
+        return `
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center">
+            <p class="text-slate-500">This sheet has no columns yet. Add column headers in Google Sheets and refresh.</p>
+          </div>
+        `;
+      }
+
+      const displayCols = headers.slice(0, 4);
+
+      if (rows.length === 0) {
+        return `
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-4 border-b border-slate-100 flex justify-between items-center">
+              <h2 class="font-semibold text-slate-800">${sheetName}</h2>
+              <button onclick="showEditModal('${sheetName}')" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium">${icons.plus} Add</button>
+            </div>
+            <div class="p-12 text-center">
+              <div class="text-slate-300 mb-3">${icons.table}</div>
+              <p class="text-slate-500">No records yet</p>
+              <button onclick="showEditModal('${sheetName}')" class="text-indigo-600 hover:text-indigo-700 mt-2 text-sm font-medium">Add your first record</button>
+            </div>
+          </div>
+        `;
+      }
+
+      const rowsHtml = rows.map(row => {
+        const cells = displayCols.map((col, idx) => {
+          const value = formatCellValue(row[col], col);
+          if (idx === 0) return `<span class="font-medium text-slate-800">${value}</span>`;
+          return `<span class="text-slate-500 text-sm">${value}</span>`;
+        }).join('<span class="text-slate-300 mx-2">•</span>');
+
+        return `
+          <div class="p-4 hover:bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+            <div class="flex items-center gap-2 flex-wrap">${cells}</div>
+            <div class="flex gap-1 flex-shrink-0">
+              <button onclick='showEditModal("${sheetName}", ${JSON.stringify(row).replace(/'/g, "\\'")})' class="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">${icons.edit}</button>
+              <button onclick="deleteItem('${sheetName}', ${row._rowNumber})" class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">${icons.trash}</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div class="p-4 border-b border-slate-100 flex justify-between items-center">
+            <h2 class="font-semibold text-slate-800">${sheetName} <span class="text-slate-400 font-normal">(${rows.length})</span></h2>
+            <button onclick="showEditModal('${sheetName}')" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium">${icons.plus} Add</button>
+          </div>
+          ${rowsHtml}
+        </div>
+      `;
+    }
+
+    function render() {
+      const app = document.getElementById('app');
+
+      if (!isAuthenticated) {
+        app.innerHTML = renderLogin();
+        setTimeout(() => document.getElementById('passwordInput')?.focus(), 100);
+        return;
+      }
+
+      if (!API_URL) {
+        app.innerHTML = renderSetup();
+        return;
+      }
+
+      const tabsHtml = sheetsInfo.map(sheet => `
+        <button onclick="setActiveSheet('${sheet.name}')" class="flex items-center gap-2 px-4 py-2 rounded-lg font-medium ${activeSheet === sheet.name ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}">
+          ${icons.table} ${sheet.name}
+        </button>
+      `).join('');
+
+      app.innerHTML = `
+        <header class="bg-white border-b border-slate-200 px-6 py-4">
+          <div class="max-w-5xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white">${icons.music}</div>
+              <div>
+                <h1 class="text-xl font-semibold text-slate-800">Accompanist Studio</h1>
+                <p class="text-sm text-slate-500 flex items-center gap-1">${icons.shield} Secured</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="fetchAllData()" class="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">${icons.refresh} Refresh</button>
+              <button onclick="showSettings()" class="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">${icons.settings}</button>
+              <button onclick="logout()" class="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">${icons.logout}</button>
+            </div>
+          </div>
+        </header>
+
+        <div class="max-w-5xl mx-auto px-6 pt-6">
+          <div id="loader" style="display:none" class="bg-white rounded-2xl p-12 text-center mb-6">
+            <div class="animate-spin w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p class="text-slate-500">Loading...</p>
+          </div>
+
+          ${sheetsInfo.length === 0 ? `
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center">
+              <p class="text-slate-500">No sheets found. Make sure your Google Sheet has at least one tab with column headers.</p>
+              <button onclick="fetchAllData()" class="mt-4 text-indigo-600 hover:text-indigo-700 font-medium">Refresh</button>
+            </div>
+          ` : `
+            <div class="flex gap-2 mb-6 flex-wrap">${tabsHtml}</div>
+            ${activeSheet ? renderSheetTab(activeSheet) : ''}
+          `}
+        </div>
+      `;
+    }
+
+    function connectApi() {
+      const url = document.getElementById('apiUrlInput')?.value;
+      if (url) {
+        API_URL = url;
+        localStorage.setItem('accompanist_api_url', url);
+        fetchAllData();
+      }
+    }
+
+    // Initialize
+    render();
+    if (isAuthenticated && API_URL) fetchAllData();
+  </script>
+</body>
+</html>
