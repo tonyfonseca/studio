@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Accompanist Studio</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     .modal-backdrop { background: rgba(0,0,0,0.5); }
   </style>
@@ -14,22 +15,33 @@
 
   <script>
     // ============================================
-    // ACCOMPANIST STUDIO (v3 - With Secret Key)
+    // ACCOMPANIST STUDIO (v4 - Google Sign-In)
     // ============================================
-    // CONFIGURATION - Edit these values:
+    // SETUP INSTRUCTIONS:
+    //
+    // 1. Go to https://console.cloud.google.com/
+    // 2. Create a new project (or select existing)
+    // 3. Go to "APIs & Services" → "Credentials"
+    // 4. Click "Create Credentials" → "OAuth client ID"
+    // 5. Select "Web application"
+    // 6. Add your domain to "Authorized JavaScript origins"
+    //    - For local testing: http://localhost
+    //    - For GitHub Pages: https://yourusername.github.io
+    //    - For custom domain: https://yourdomain.com
+    // 7. Copy the Client ID and paste it below
+    //
+    // ============================================
 
-    // App password (for the login screen)
-    const APP_PASSWORD = "piano123";
+    // REQUIRED: Your Google OAuth Client ID
+    // Get this from Google Cloud Console (see instructions above)
+    const GOOGLE_CLIENT_ID = "737676747710-ib2al8nq5p3quqsfi73gj2aht1g5f1rb.apps.googleusercontent.com";
 
-    // API secret key (must match the key in your Google Apps Script)
-    const API_SECRET_KEY = "CHANGE-THIS-TO-YOUR-OWN-SECRET-KEY-123";
-
-    // Optionally, preset your Google Apps Script URL here:
+    // Optional: Preset your Google Apps Script URL
     const PRESET_API_URL = "";
 
     // ============================================
 
-    let isAuthenticated = sessionStorage.getItem('accompanist_auth') === 'true';
+    let currentUser = null;  // { email, name, picture, token }
     let API_URL = PRESET_API_URL || localStorage.getItem('accompanist_api_url') || '';
 
     // Dynamic data storage
@@ -47,20 +59,120 @@
       refresh: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>',
       settings: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>',
       x: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>',
-      lock: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>',
+      google: '<svg class="w-5 h-5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>',
       logout: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>',
-      shield: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>'
+      shield: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>',
+      user: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>'
     };
 
-    // ===== API Functions (with secret key) =====
+    // ===== Google Sign-In Functions =====
+
+    function handleCredentialResponse(response) {
+      // Decode the JWT to get user info
+      const payload = parseJwt(response.credential);
+
+      currentUser = {
+        email: payload.email,
+        name: payload.name,
+        picture: payload.picture,
+        token: response.credential
+      };
+
+      // Store token in session
+      sessionStorage.setItem('google_token', response.credential);
+
+      render();
+      if (API_URL) fetchAllData();
+    }
+
+    function parseJwt(token) {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(atob(base64).split('').map(c =>
+        '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+      ).join(''));
+      return JSON.parse(jsonPayload);
+    }
+
+    function initGoogleSignIn() {
+      if (typeof google === 'undefined' || !google.accounts) {
+        // Google library not loaded yet, retry
+        setTimeout(initGoogleSignIn, 100);
+        return;
+      }
+
+      // Check for existing session
+      const savedToken = sessionStorage.getItem('google_token');
+      if (savedToken) {
+        try {
+          const payload = parseJwt(savedToken);
+          // Check if token is still valid (not expired)
+          if (payload.exp * 1000 > Date.now()) {
+            currentUser = {
+              email: payload.email,
+              name: payload.name,
+              picture: payload.picture,
+              token: savedToken
+            };
+            render();
+            if (API_URL) fetchAllData();
+            return;
+          }
+        } catch (e) {
+          sessionStorage.removeItem('google_token');
+        }
+      }
+
+      render();
+    }
+
+    function renderGoogleButton() {
+      setTimeout(() => {
+        const buttonDiv = document.getElementById('googleSignInButton');
+        if (buttonDiv && typeof google !== 'undefined' && google.accounts) {
+          google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            callback: handleCredentialResponse,
+            auto_select: false
+          });
+          google.accounts.id.renderButton(buttonDiv, {
+            theme: 'outline',
+            size: 'large',
+            width: 280,
+            text: 'signin_with'
+          });
+        }
+      }, 100);
+    }
+
+    function logout() {
+      currentUser = null;
+      sessionStorage.removeItem('google_token');
+      sheetsInfo = [];
+      sheetsData = {};
+      activeSheet = null;
+
+      // Revoke Google Sign-In
+      if (typeof google !== 'undefined' && google.accounts) {
+        google.accounts.id.disableAutoSelect();
+      }
+
+      render();
+    }
+
+    // ===== API Functions (with Google token) =====
 
     async function fetchSheetsList() {
+      if (!currentUser) return false;
+
       try {
-        const res = await fetch(`${API_URL}?key=${encodeURIComponent(API_SECRET_KEY)}`);
+        const res = await fetch(`${API_URL}?token=${encodeURIComponent(currentUser.token)}`);
         const data = await res.json();
         if (data.error) {
-          if (data.error === 'Unauthorized') {
-            throw new Error('Invalid API key. Check that your secret key matches.');
+          if (data.error.includes('not authorized') || data.error.includes('Unauthorized')) {
+            showError('Your email is not authorized to access this data. Contact the administrator.');
+            logout();
+            return false;
           }
           throw new Error(data.error);
         }
@@ -76,8 +188,10 @@
     }
 
     async function fetchSheetData(sheetName) {
+      if (!currentUser) return false;
+
       try {
-        const res = await fetch(`${API_URL}?key=${encodeURIComponent(API_SECRET_KEY)}&sheet=${encodeURIComponent(sheetName)}`);
+        const res = await fetch(`${API_URL}?token=${encodeURIComponent(currentUser.token)}&sheet=${encodeURIComponent(sheetName)}`);
         const data = await res.json();
         if (data.error) throw new Error(data.error);
         sheetsData[sheetName] = {
@@ -92,7 +206,7 @@
     }
 
     async function fetchAllData() {
-      if (!API_URL) return;
+      if (!API_URL || !currentUser) return;
       showLoading(true);
 
       const success = await fetchSheetsList();
@@ -110,11 +224,13 @@
     }
 
     async function saveItem(sheetName, item, isNew) {
+      if (!currentUser) return false;
+
       try {
         const response = await fetch(API_URL, {
           method: 'POST',
           body: JSON.stringify({
-            key: API_SECRET_KEY,
+            token: currentUser.token,
             action: isNew ? 'add' : 'update',
             sheet: sheetName,
             id: item._rowNumber,
@@ -133,12 +249,14 @@
     }
 
     async function deleteItem(sheetName, rowNumber) {
+      if (!currentUser) return;
       if (!confirm('Are you sure you want to delete this item?')) return;
+
       try {
         const response = await fetch(API_URL, {
           method: 'POST',
           body: JSON.stringify({
-            key: API_SECRET_KEY,
+            token: currentUser.token,
             action: 'delete',
             sheet: sheetName,
             id: rowNumber
@@ -174,30 +292,6 @@
         activeSheet = null;
         fetchAllData();
       }
-    }
-
-    function logout() {
-      sessionStorage.removeItem('accompanist_auth');
-      isAuthenticated = false;
-      render();
-    }
-
-    function attemptLogin() {
-      const input = document.getElementById('passwordInput');
-      if (input.value === APP_PASSWORD) {
-        isAuthenticated = true;
-        sessionStorage.setItem('accompanist_auth', 'true');
-        render();
-        if (API_URL) fetchAllData();
-      } else {
-        document.getElementById('loginError').classList.remove('hidden');
-        input.value = '';
-        input.focus();
-      }
-    }
-
-    function handlePasswordKeypress(e) {
-      if (e.key === 'Enter') attemptLogin();
     }
 
     function setActiveSheet(name) {
@@ -348,17 +442,28 @@
     // ===== Render Functions =====
 
     function renderLogin() {
+      setTimeout(renderGoogleButton, 100);
+
       return `
         <div class="min-h-screen flex items-center justify-center p-6">
           <div class="bg-white rounded-2xl shadow-xl p-8 max-w-sm w-full">
             <div class="flex flex-col items-center mb-6">
-              <div class="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white mb-4">${icons.lock}</div>
+              <div class="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white mb-4">${icons.music}</div>
               <h1 class="text-2xl font-bold text-slate-800">Accompanist Studio</h1>
-              <p class="text-slate-500">Enter password to continue</p>
+              <p class="text-slate-500 text-center mt-2">Sign in with your Google account to continue</p>
             </div>
-            <div id="loginError" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg mb-4 text-sm">Incorrect password</div>
-            <input type="password" id="passwordInput" placeholder="Password" onkeypress="handlePasswordKeypress(event)" class="w-full px-4 py-3 border border-slate-200 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-500" autofocus>
-            <button onclick="attemptLogin()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg font-medium">Sign In</button>
+            <div class="flex justify-center mb-4">
+              <div id="googleSignInButton"></div>
+            </div>
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+              <div class="flex items-start gap-3">
+                <div class="text-blue-600 mt-0.5">${icons.shield}</div>
+                <div>
+                  <h3 class="font-medium text-blue-800 text-sm">Secure Access</h3>
+                  <p class="text-xs text-blue-700 mt-1">Only authorized email addresses can access this app's data.</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       `;
@@ -378,13 +483,14 @@
             <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 flex items-start gap-3">
               <div class="text-green-600 mt-0.5">${icons.shield}</div>
               <div>
-                <h3 class="font-medium text-green-800">Secured with API Key</h3>
-                <p class="text-sm text-green-700">Your data is protected. Only apps with the correct secret key can access it.</p>
+                <h3 class="font-medium text-green-800">Signed in as ${currentUser.email}</h3>
+                <p class="text-sm text-green-700">Your data is protected with Google authentication.</p>
               </div>
             </div>
             <label class="block text-sm font-medium text-slate-700 mb-2">Google Apps Script URL:</label>
             <input type="url" id="apiUrlInput" placeholder="https://script.google.com/macros/s/.../exec" class="w-full px-4 py-3 border border-slate-200 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-500">
             <button onclick="connectApi()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg font-medium">Connect</button>
+            <button onclick="logout()" class="w-full mt-3 text-slate-500 hover:text-slate-700 py-2 text-sm">Sign out</button>
           </div>
         </div>
       `;
@@ -454,9 +560,8 @@
     function render() {
       const app = document.getElementById('app');
 
-      if (!isAuthenticated) {
+      if (!currentUser) {
         app.innerHTML = renderLogin();
-        setTimeout(() => document.getElementById('passwordInput')?.focus(), 100);
         return;
       }
 
@@ -471,6 +576,10 @@
         </button>
       `).join('');
 
+      const userPicture = currentUser.picture
+        ? `<img src="${currentUser.picture}" class="w-8 h-8 rounded-full" alt="">`
+        : `<div class="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600">${icons.user}</div>`;
+
       app.innerHTML = `
         <header class="bg-white border-b border-slate-200 px-6 py-4">
           <div class="max-w-5xl mx-auto flex items-center justify-between">
@@ -478,13 +587,16 @@
               <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white">${icons.music}</div>
               <div>
                 <h1 class="text-xl font-semibold text-slate-800">Accompanist Studio</h1>
-                <p class="text-sm text-slate-500 flex items-center gap-1">${icons.shield} Secured</p>
+                <p class="text-sm text-slate-500 flex items-center gap-1">${icons.shield} ${currentUser.email}</p>
               </div>
             </div>
             <div class="flex items-center gap-2">
               <button onclick="fetchAllData()" class="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">${icons.refresh} Refresh</button>
               <button onclick="showSettings()" class="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">${icons.settings}</button>
-              <button onclick="logout()" class="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">${icons.logout}</button>
+              <div class="flex items-center gap-2 px-3 py-2">
+                ${userPicture}
+              </div>
+              <button onclick="logout()" class="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg" title="Sign out">${icons.logout}</button>
             </div>
           </div>
         </header>
@@ -517,9 +629,8 @@
       }
     }
 
-    // Initialize
-    render();
-    if (isAuthenticated && API_URL) fetchAllData();
+    // Initialize when page loads
+    window.onload = initGoogleSignIn;
   </script>
 </body>
 </html>
