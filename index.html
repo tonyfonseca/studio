@@ -653,8 +653,16 @@
         `;
       }
 
-      // Reorder headers: put foreign key columns first
-      const sortedHeaders = [...headers].sort((a, b) => {
+      // Reorder headers: put foreign key columns first, hide ID column for its own sheet
+      const isOwnIdColumn = (col) => {
+        if (!col.toLowerCase().endsWith('id')) return false;
+        const baseName = col.slice(0, -2).toLowerCase();
+        return sheetName.toLowerCase() === baseName || sheetName.toLowerCase() === baseName + 's';
+      };
+
+      const filteredHeaders = headers.filter(col => !isOwnIdColumn(col));
+
+      const sortedHeaders = [...filteredHeaders].sort((a, b) => {
         const aIsFK = getForeignKeySheet(a) !== null;
         const bIsFK = getForeignKeySheet(b) !== null;
         if (aIsFK && !bIsFK) return -1;
@@ -745,7 +753,7 @@
 
       app.innerHTML = `
         <header class="bg-white border-b border-slate-200 px-6 py-4">
-          <div class="max-w-5xl mx-auto flex items-center justify-between">
+          <div class="max-w-7xl mx-auto flex items-center justify-between">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white">${icons.music}</div>
               <div>
@@ -764,7 +772,7 @@
           </div>
         </header>
 
-        <div class="max-w-5xl mx-auto px-6 pt-6">
+        <div class="max-w-7xl mx-auto px-6 pt-6">
           <div id="loader" style="display:none" class="bg-white rounded-2xl p-12 text-center mb-6">
             <div class="animate-spin w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto mb-4"></div>
             <p class="text-slate-500">Loading...</p>
