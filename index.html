@@ -363,14 +363,30 @@
       return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()} ${date.getFullYear()}`;
     }
 
+    function formatPhone(value) {
+      if (!value) return '—';
+      // Remove all non-digits
+      const digits = String(value).replace(/\D/g, '');
+      // Format as 123-456-7890 if 10 digits
+      if (digits.length === 10) {
+        return `${digits.slice(0,3)}-${digits.slice(3,6)}-${digits.slice(6)}`;
+      }
+      // Return original if not 10 digits
+      return value;
+    }
+
     function formatCellValue(value, columnName) {
       if (value === null || value === undefined || value === '') return '—';
       const fkSheet = getForeignKeySheet(columnName);
       if (fkSheet) return getForeignKeyDisplay(fkSheet, value);
-      // Format date columns
       const lower = columnName.toLowerCase();
+      // Format date columns
       if (lower === 'date' || lower.endsWith('date')) {
         return formatDate(value);
+      }
+      // Format phone columns
+      if (lower.includes('phone')) {
+        return formatPhone(value);
       }
       return String(value);
     }
@@ -511,7 +527,7 @@
             <div class="text-slate-400 mt-0.5">${isPhone ? icons.phone : icons.user}</div>
             <div>
               <p class="text-xs text-slate-500 uppercase tracking-wide">${label}</p>
-              <p class="text-slate-800 font-medium">${isPhone && value !== '—' ? `<a href="tel:${value}" class="text-indigo-600 hover:underline">${value}</a>` : value}</p>
+              <p class="text-slate-800 font-medium">${isPhone && value !== '—' ? `<a href="tel:${value}" class="text-indigo-600 hover:underline">${formatPhone(value)}</a>` : value}</p>
             </div>
           </div>
         `;
