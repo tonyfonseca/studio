@@ -558,12 +558,23 @@
         }
 
         if (relatedPerfs.length > 0) {
+          // Get the headers from the related sheet to find song columns dynamically
+          const relatedHeaders = sheetsData[relatedSheetName]?.headers || [];
+
           const perfRows = relatedPerfs.map(perf => {
             const date = perf['Date'] ? formatDate(perf['Date']) : '—';
             const time = perf['Time'] || '';
-            const song1 = perf['Song1Title'] || perf['Song1'] || '';
-            const song2 = perf['Song2Title'] || perf['Song2'] || '';
-            const songs = [song1, song2].filter(Boolean).join(', ') || 'No songs listed';
+
+            // Find song title columns dynamically (look for columns containing "title" or "song")
+            const songTitles = [];
+            for (const header of relatedHeaders) {
+              const lower = header.toLowerCase();
+              if ((lower.includes('song') && lower.includes('title')) ||
+                  (lower.includes('title') && !lower.includes('book'))) {
+                if (perf[header]) songTitles.push(perf[header]);
+              }
+            }
+            const songs = songTitles.length > 0 ? songTitles.join(', ') : 'No songs listed';
 
             return `
               <div class="p-4 border-b border-slate-100 last:border-0 hover:bg-slate-50">
