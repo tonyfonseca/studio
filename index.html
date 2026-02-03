@@ -565,19 +565,24 @@
             const date = perf['Date'] ? formatDate(perf['Date']) : '—';
             const time = perf['Time'] || '';
 
-            // Group song fields by song number (Song1*, Song2*, etc.)
+            // Group song fields by song number (Song1*, Song 1 *, etc.)
             const songGroups = {};
             for (const header of relatedHeaders) {
-              const match = header.match(/^song(\d+)(.+)$/i);
+              // Match patterns like "Song1Title", "Song 1 Title", "Song1 Title", etc.
+              const match = header.match(/^song\s*(\d+)\s*(.+)$/i);
               if (match) {
                 const songNum = match[1];
-                const fieldName = match[2]; // e.g., "Title", "Book", "Page", etc.
+                const fieldName = match[2].replace(/\s+/g, ''); // Normalize: "Title", "Book", etc.
                 if (perf[header]) {
                   if (!songGroups[songNum]) songGroups[songNum] = {};
                   songGroups[songNum][fieldName] = perf[header];
                 }
               }
             }
+
+            // Debug: log what we found (can remove later)
+            console.log('Headers:', relatedHeaders);
+            console.log('Song groups:', songGroups);
 
             // Build song display HTML
             let songsHtml = '';
