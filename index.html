@@ -475,58 +475,70 @@
         `;
       }).join('');
 
-      // Find related performances (look for sheets that have a column referencing this sheet)
+      // Find related performances (look for any sheet that has a StudentID column)
       let performancesHtml = '';
-      const performancesSheet = sheetsData['Performances'];
 
-      if (performancesSheet && sheetName === 'Students') {
-        const perfHeaders = performancesSheet.headers;
-        const studentIdCol = perfHeaders.find(h => h === 'StudentID' || h === 'Student ID');
+      if (sheetName === 'Students') {
+        // Find sheets that reference Students via StudentID
+        let relatedPerfs = [];
+        let relatedSheetName = '';
 
-        if (studentIdCol) {
-          const relatedPerfs = performancesSheet.rows.filter(p => p[studentIdCol] == studentId);
+        for (const sheet of sheetsInfo) {
+          if (sheet.name === 'Students') continue;
+          const sheetData = sheetsData[sheet.name];
+          if (!sheetData) continue;
 
-          if (relatedPerfs.length > 0) {
-            const perfRows = relatedPerfs.map(perf => {
-              const date = perf['Date'] || '—';
-              const time = perf['Time'] || '';
-              const song1 = perf['Song1Title'] || perf['Song1'] || '';
-              const song2 = perf['Song2Title'] || perf['Song2'] || '';
-              const songs = [song1, song2].filter(Boolean).join(', ') || 'No songs listed';
-
-              return `
-                <div class="p-4 border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                  <div class="flex items-center gap-2 mb-1">
-                    <span class="text-slate-400">${icons.calendar}</span>
-                    <span class="font-medium text-slate-800">${date}</span>
-                    ${time ? `<span class="text-slate-500">at ${time}</span>` : ''}
-                  </div>
-                  <div class="flex items-center gap-2 ml-6">
-                    <span class="text-slate-400">${icons.music}</span>
-                    <span class="text-slate-600 text-sm">${songs}</span>
-                  </div>
-                </div>
-              `;
-            }).join('');
-
-            performancesHtml = `
-              <div class="mt-6">
-                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide mb-3">Performances (${relatedPerfs.length})</h3>
-                <div class="bg-slate-50 rounded-xl border border-slate-200">
-                  ${perfRows}
-                </div>
-              </div>
-            `;
-          } else {
-            performancesHtml = `
-              <div class="mt-6">
-                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide mb-3">Performances</h3>
-                <div class="bg-slate-50 rounded-xl border border-slate-200 p-6 text-center">
-                  <p class="text-slate-500 text-sm">No performances scheduled yet</p>
-                </div>
-              </div>
-            `;
+          const studentIdCol = sheetData.headers.find(h => h === 'StudentID' || h === 'Student ID');
+          if (studentIdCol) {
+            const matches = sheetData.rows.filter(p => p[studentIdCol] == studentId);
+            if (matches.length > 0) {
+              relatedPerfs = matches;
+              relatedSheetName = sheet.name;
+              break;
+            }
           }
+        }
+
+        if (relatedPerfs.length > 0) {
+          const perfRows = relatedPerfs.map(perf => {
+            const date = perf['Date'] || '—';
+            const time = perf['Time'] || '';
+            const song1 = perf['Song1Title'] || perf['Song1'] || '';
+            const song2 = perf['Song2Title'] || perf['Song2'] || '';
+            const songs = [song1, song2].filter(Boolean).join(', ') || 'No songs listed';
+
+            return `
+              <div class="p-4 border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-slate-400">${icons.calendar}</span>
+                  <span class="font-medium text-slate-800">${date}</span>
+                  ${time ? `<span class="text-slate-500">at ${time}</span>` : ''}
+                </div>
+                <div class="flex items-center gap-2 ml-6">
+                  <span class="text-slate-400">${icons.music}</span>
+                  <span class="text-slate-600 text-sm">${songs}</span>
+                </div>
+              </div>
+            `;
+          }).join('');
+
+          performancesHtml = `
+            <div class="mt-6">
+              <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide mb-3">${relatedSheetName} (${relatedPerfs.length})</h3>
+              <div class="bg-slate-50 rounded-xl border border-slate-200">
+                ${perfRows}
+              </div>
+            </div>
+          `;
+        } else {
+          performancesHtml = `
+            <div class="mt-6">
+              <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide mb-3">Performances</h3>
+              <div class="bg-slate-50 rounded-xl border border-slate-200 p-6 text-center">
+                <p class="text-slate-500 text-sm">No performances scheduled yet</p>
+              </div>
+            </div>
+          `;
         }
       }
 
@@ -641,17 +653,28 @@
         `;
       }
 
-      // Table header
-      const headerCells = headers.map(col =>
-        `<th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider whitespace-nowrap">${formatColumnName(col)}</th>`
-      ).join('');
+      // Reorder headers: put foreign key columns first
+      const sortedHeaders = [...headers].sort((a, b) => {
+        const aIsFK = getForeignKeySheet(a) !== null;
+        const bIsFK = getForeignKeySheet(b) !== null;
+        if (aIsFK && !bIsFK) return -1;
+        if (!aIsFK && bIsFK) return 1;
+        return 0;
+      });
+
+      // Table header - show "Student" instead of "Student ID" for FK columns
+      const headerCells = sortedHeaders.map(col => {
+        const fkSheet = getForeignKeySheet(col);
+        const label = fkSheet ? fkSheet.replace(/s$/, '') : formatColumnName(col);
+        return `<th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider whitespace-nowrap">${label}</th>`;
+      }).join('');
 
       // Table rows
       const nameCol = headers.find(h => h.toLowerCase().includes('name')) || headers[1] || headers[0];
       const isStudentsSheet = sheetName === 'Students';
 
       const tableRows = rows.map(row => {
-        const cells = headers.map(col => {
+        const cells = sortedHeaders.map(col => {
           const value = formatCellValue(row[col], col);
           // Make name column clickable for Students sheet
           if (isStudentsSheet && col === nameCol) {
