@@ -50,6 +50,9 @@
     let activeSheet = null;
     let hasLoadedData = false;
 
+    // Temporary storage for row data (to avoid JSON in onclick handlers)
+    let tempRowCache = {};
+
     // Icons
     const icons = {
       music: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/></svg>',
@@ -406,6 +409,29 @@
       if (modal) modal.remove();
     }
 
+    // Store row data and return a cache key
+    function cacheRow(sheetName, row) {
+      const key = `${sheetName}_${row._rowNumber}`;
+      tempRowCache[key] = row;
+      return key;
+    }
+
+    // Retrieve row data from cache
+    function getCachedRow(key) {
+      return tempRowCache[key];
+    }
+
+    // Wrapper functions for onclick handlers
+    function editRowByKey(sheetName, cacheKey) {
+      const row = getCachedRow(cacheKey);
+      if (row) showEditModal(sheetName, row);
+    }
+
+    function viewRowByKey(sheetName, cacheKey) {
+      const row = getCachedRow(cacheKey);
+      if (row) showDetailModal(sheetName, row);
+    }
+
     // ===== Modal Functions =====
 
     // Check if column is the sheet's own ID column
@@ -523,6 +549,9 @@
     function showDetailModal(sheetName, row) {
       const sheetInfo = sheetsInfo.find(s => s.name === sheetName);
       if (!sheetInfo) return;
+
+      // Cache the row for the Edit button
+      const rowKey = cacheRow(sheetName, row);
 
       const headers = sheetInfo.headers;
 
@@ -688,7 +717,7 @@
 
           <div class="flex gap-3 mt-6">
             <button onclick="closeModal()" class="flex-1 py-2 px-4 border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50">Close</button>
-            <button onclick="closeModal(); showEditModal('${sheetName}', ${JSON.stringify(row).replace(/'/g, "\\'")})" class="flex-1 py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center justify-center gap-2">${icons.edit} Edit</button>
+            <button onclick="closeModal(); editRowByKey('${sheetName}', '${rowKey}')" class="flex-1 py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center justify-center gap-2">${icons.edit} Edit</button>
           </div>
         </div>
       `;
@@ -802,12 +831,15 @@
       const isStudentsSheet = sheetName === 'Students';
 
       const tableRows = rows.map(row => {
+        // Cache the row data to avoid JSON in onclick handlers
+        const rowKey = cacheRow(sheetName, row);
+
         const cells = sortedHeaders.map(col => {
           const value = formatCellValue(row[col], col);
           // Make name column clickable for Students sheet
           if (isStudentsSheet && col === nameCol) {
             return `<td class="px-4 py-3 text-sm whitespace-nowrap">
-              <button onclick='showDetailModal("${sheetName}", ${JSON.stringify(row).replace(/'/g, "\\'")})' class="text-indigo-600 hover:text-indigo-800 font-medium hover:underline">${value}</button>
+              <button onclick="viewRowByKey('${sheetName}', '${rowKey}')" class="text-indigo-600 hover:text-indigo-800 font-medium hover:underline">${value}</button>
             </td>`;
           }
           return `<td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">${value}</td>`;
@@ -817,8 +849,8 @@
           <tr class="hover:bg-slate-50 border-b border-slate-100">
             ${cells}
             <td class="px-4 py-3 text-right whitespace-nowrap">
-              ${isStudentsSheet ? `<button onclick='showDetailModal("${sheetName}", ${JSON.stringify(row).replace(/'/g, "\\'")})' class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg inline-flex" title="View details">${icons.eye}</button>` : ''}
-              <button onclick='showEditModal("${sheetName}", ${JSON.stringify(row).replace(/'/g, "\\'")})' class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg inline-flex" title="Edit">${icons.edit}</button>
+              ${isStudentsSheet ? `<button onclick="viewRowByKey('${sheetName}', '${rowKey}')" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg inline-flex" title="View details">${icons.eye}</button>` : ''}
+              <button onclick="editRowByKey('${sheetName}', '${rowKey}')" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg inline-flex" title="Edit">${icons.edit}</button>
               <button onclick="deleteItem('${sheetName}', ${row._rowNumber})" class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg inline-flex" title="Delete">${icons.trash}</button>
             </td>
           </tr>
