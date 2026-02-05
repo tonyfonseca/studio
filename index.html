@@ -230,25 +230,35 @@
     }
 
     async function saveItem(sheetName, item, isNew) {
-      if (!currentUser) return false;
+      console.log('saveItem called:', { sheetName, item, isNew });
+      if (!currentUser) {
+        console.error('No current user');
+        return false;
+      }
 
       try {
+        const payload = {
+          token: currentUser.token,
+          action: isNew ? 'add' : 'update',
+          sheet: sheetName,
+          id: item._rowNumber,
+          row: item
+        };
+        console.log('Sending payload:', payload);
+
         const response = await fetch(API_URL, {
           method: 'POST',
-          body: JSON.stringify({
-            token: currentUser.token,
-            action: isNew ? 'add' : 'update',
-            sheet: sheetName,
-            id: item._rowNumber,
-            row: item
-          })
+          body: JSON.stringify(payload)
         });
+        console.log('Response status:', response.status);
         const result = await response.json();
+        console.log('Response result:', result);
         if (result.error) throw new Error(result.error);
         await fetchSheetData(sheetName);
         render();
         return true;
       } catch (err) {
+        console.error('Save error:', err);
         showError(err.message);
         return false;
       }
@@ -493,14 +503,20 @@
     }
 
     async function handleSave(sheetName, isNew, rowNumber) {
+      console.log('handleSave called:', { sheetName, isNew, rowNumber });
       const sheetInfo = sheetsInfo.find(s => s.name === sheetName);
-      if (!sheetInfo) return;
+      if (!sheetInfo) {
+        console.error('Sheet info not found for:', sheetName);
+        return;
+      }
       const item = { _rowNumber: rowNumber };
       for (const col of sheetInfo.headers) {
         const el = document.getElementById('f_' + col);
         item[col] = el ? el.value : '';
       }
+      console.log('Saving item:', item);
       const success = await saveItem(sheetName, item, isNew);
+      console.log('Save result:', success);
       if (success) closeModal();
     }
 
