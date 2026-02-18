@@ -389,6 +389,49 @@
       return value;
     }
 
+    function formatTime(value) {
+      if (!value) return '';
+      const str = String(value);
+      // Handle Google Sheets time format (stores as 1899-12-30T08:30:00.000Z)
+      if (str.includes('1899') || str.includes('T')) {
+        const date = new Date(str);
+        if (!isNaN(date.getTime())) {
+          const hours = date.getUTCHours();
+          const minutes = date.getUTCMinutes();
+          return `${hours}:${minutes.toString().padStart(2, '0')}`;
+        }
+      }
+      // Handle decimal fraction (e.g. 0.354 = 8:30)
+      const num = parseFloat(str);
+      if (!isNaN(num) && num > 0 && num < 1) {
+        const totalMinutes = Math.round(num * 24 * 60);
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        return `${hours}:${minutes.toString().padStart(2, '0')}`;
+      }
+      return str;
+    }
+
+    // Get a sortable time value (minutes since midnight) for sorting
+    function getTimeSortValue(value) {
+      if (!value) return 9999;
+      const str = String(value);
+      if (str.includes('1899') || str.includes('T')) {
+        const date = new Date(str);
+        if (!isNaN(date.getTime())) {
+          return date.getUTCHours() * 60 + date.getUTCMinutes();
+        }
+      }
+      const num = parseFloat(str);
+      if (!isNaN(num) && num > 0 && num < 1) {
+        return Math.round(num * 24 * 60);
+      }
+      // Try parsing "8:30" format
+      const match = str.match(/^(\d{1,2}):(\d{2})/);
+      if (match) return parseInt(match[1]) * 60 + parseInt(match[2]);
+      return 9999;
+    }
+
     function formatCellValue(value, columnName) {
       if (value === null || value === undefined || value === '') return '—';
       const fkSheet = getForeignKeySheet(columnName);
@@ -401,6 +444,10 @@
       // Format phone columns
       if (lower.includes('phone')) {
         return formatPhone(value);
+      }
+      // Format time columns
+      if (lower === 'time' || lower.endsWith('time')) {
+        return formatTime(value);
       }
       return String(value);
     }
@@ -815,20 +862,20 @@
       }
       const songNums = Object.keys(songColsByNum).sort();
 
-      // Sort rows by time if available
+      // Sort rows by time (earliest first)
       const sortedRows = [...rows].sort((a, b) => {
-        const tA = timeCol ? (a[timeCol] || '') : '';
-        const tB = timeCol ? (b[timeCol] || '') : '';
-        return tA.localeCompare(tB);
+        const tA = timeCol ? getTimeSortValue(a[timeCol]) : 9999;
+        const tB = timeCol ? getTimeSortValue(b[timeCol]) : 9999;
+        return tA - tB;
       });
 
-      // Build print rows — one row per song per performance
-      const printRows = [];
+      // Build print rows — one row per song per performance, grouped by student
+      const printGroups = []; // each group = { rows: [...] } to keep songs together
       for (const row of sortedRows) {
         const studentName = studentIdCol ? getForeignKeyDisplay('Students', row[studentIdCol]) : '—';
-        const time = timeCol ? (row[timeCol] || '') : '';
-        const date = dateCol ? formatDate(row[dateCol]) : '';
+        const time = timeCol ? formatTime(row[timeCol]) : '';
 
+        const groupRows = [];
         let isFirst = true;
         for (const num of songNums) {
           const cols = songColsByNum[num];
@@ -837,19 +884,23 @@
           const page  = cols['Page']  ? (row[cols['Page']]  || '') : '';
           if (!title && !book && !page) continue; // skip empty songs
 
-          printRows.push({ studentName: isFirst ? studentName : '', time: isFirst ? time : '', title, book, page, isFirst });
+          groupRows.push({ studentName: isFirst ? studentName : '', time: isFirst ? time : '', title, book, page, isFirst });
           isFirst = false;
         }
+        if (groupRows.length > 0) printGroups.push(groupRows);
       }
 
-      const tableRows = printRows.map(r => `
-        <tr class="${r.isFirst ? '' : 'continuation'}">
-          <td>${r.studentName}</td>
-          <td>${r.title}</td>
-          <td>${r.book}</td>
-          <td>${r.page}</td>
-          <td>${r.time}</td>
-        </tr>`).join('');
+      const tableRows = printGroups.map(group => {
+        const rows = group.map(r => `
+          <tr>
+            <td>${r.studentName}</td>
+            <td>${r.title}</td>
+            <td>${r.book}</td>
+            <td>${r.page}</td>
+            <td>${r.time}</td>
+          </tr>`).join('');
+        return `<tbody class="perf-group">${rows}</tbody>`;
+      }).join('');
 
       const html = `<!DOCTYPE html>
 <html>
@@ -861,11 +912,15 @@
     h2 { font-size: 13px; font-weight: normal; color: #666; margin-bottom: 16px; }
     table { width: 100%; border-collapse: collapse; }
     th { text-align: left; padding: 6px 10px; border-bottom: 2px solid #333; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
-    td { padding: 5px 10px; }
-    tr.continuation td { color: #555; font-size: 12px; padding-top: 1px; padding-bottom: 5px; }
-    tr:not(.continuation) td { border-top: 1px solid #ddd; padding-top: 7px; }
-    tr:first-child td { border-top: none; }
-    @media print { body { margin: 0; } }
+    td { padding: 5px 10px; font-size: 13px; }
+    tbody.perf-group { break-inside: avoid; }
+    tbody.perf-group tr:first-child td { border-top: 1px solid #ddd; padding-top: 7px; }
+    tbody.perf-group tr:not(:first-child) td { padding-top: 2px; padding-bottom: 2px; }
+    @media print {
+      body { margin: 0; }
+      thead { display: table-header-group; }
+      tbody.perf-group { break-inside: avoid; }
+    }
   </style>
 </head>
 <body>
@@ -881,7 +936,7 @@
         <th>Time</th>
       </tr>
     </thead>
-    <tbody>${tableRows}</tbody>
+    ${tableRows}
   </table>
 </body>
 </html>`;
